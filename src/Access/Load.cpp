@@ -24,6 +24,8 @@
 *
 =========================================================================*/
 
+#include <Python.h>
+#undef B0
 #include "Load.h"
 #include "AccessPrivate.h"
 #include "../Config.h"
@@ -440,8 +442,54 @@ Load::Load(QObject *parent) : QObject(parent), d_ptr(new LoadPrivate(this))
 					forward(QNetworkRequest(api.arg(id)), File);
 				}
 				else{
-					emit stateChanged(203);
-					dequeue();
+                    Py_Initialize();
+                    if ( !Py_IsInitialized() )
+                    {
+                        qDebug() << "Cant initialize python!";
+                        emit stateChanged(203);
+                        dequeue();
+                    }
+
+                    PyRun_SimpleString("import sys");
+                    PyRun_SimpleString("sys.path.append('./')");
+                    //PyObject* pResult = PyRun_SimpleString("print sys.path");
+                    PyObject* pModule = PyImport_ImportModule("biliId");
+                    if (!pModule) {
+                            qDebug() << "Can't open python file!";
+                            emit stateChanged(203);
+                            dequeue();
+                            break;
+                    }
+
+                    PyObject* pFunGetCid= PyObject_GetAttrString(pModule,"getCid");
+                    if(!pFunGetCid){
+                            qDebug() << "Get function getCid failed";
+                            emit stateChanged(203);
+                            dequeue();
+                            break;
+                    }
+                    qDebug() << task.request.url().toString();
+                    //PyObject *pArgs = PyTuple_New(1);
+                    //PyTuple_SetItem(pArgs, 0, Py_BuildValue("s", task.request.url().toString().toStdString().c_str()));
+                    //调用函数
+                    PyObject* pResult = PyObject_CallFunction(pFunGetCid, "s", task.request.url().toString().toStdString().c_str());
+                    qDebug() << "after call";
+                    int cid = 0;
+                    PyArg_Parse(pResult, "i", &cid);
+
+                    qDebug() << cid;
+                    //结束，释放python
+                    Py_Finalize();
+
+                    if (cid != 0){
+                        api = "http://comment.%1/%2.xml";
+                        api = api.arg(Utils::customUrl(Utils::Bilibili));
+                        forward(QNetworkRequest(api.arg(QString::number(cid))), File);
+                    } else {
+
+                        emit stateChanged(203);
+                        dequeue();
+                    }
 				}
 			}
 			break;

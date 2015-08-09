@@ -2,6 +2,8 @@
 #include "../Config.h"
 #include "../Utils.h"
 #include "../Render/ARender.h"
+#include <QFileInfo>
+#include "../UI/Interface.h"
 
 QMutex VPlayer::time;
 
@@ -129,10 +131,11 @@ APlayer(parent)
 	const char **argv = args.isEmpty() ? nullptr : new const char *[args.size()];
 	for (int i = 0; i < args.size(); ++i){
 		argv[i] = args[i];
+        qDebug() << argv[i];
 	}
 	vlc = libvlc_new(args.size(), argv);
 #ifdef Q_OS_WIN
-	libvlc_add_intf(vlc, "bililocal");
+    libvlc_add_intf(vlc, "bililocal");
 #endif
 	mp = nullptr;
 	state = Stop;
@@ -259,8 +262,8 @@ void VPlayer::play()
 {
 	if (mp){
 		if (state == Stop){
-			libvlc_video_set_format_callbacks(mp, fmt, clr);
-			libvlc_video_set_callbacks(mp, lck, nullptr, dsp, nullptr);
+            libvlc_video_set_format_callbacks(mp, fmt, clr);
+            libvlc_video_set_callbacks(mp, lck, nullptr, dsp, nullptr);
 			libvlc_media_player_play(mp);
 		}
 		else{
@@ -310,8 +313,15 @@ qint64 VPlayer::getTime()
 void VPlayer::setMedia(QString file, bool manually)
 {
 	stop(manually);
-	libvlc_media_t *m = libvlc_media_new_path(vlc, QDir::toNativeSeparators(file).toUtf8());
-	if (!m){
+
+    QFileInfo filepath(file);
+    libvlc_media_t *m = nullptr;
+    if (filepath.isFile()) {
+        m = libvlc_media_new_path(vlc, QDir::toNativeSeparators(file).toUtf8());
+    } else {
+        m = libvlc_media_new_location(vlc, file.toUtf8());
+    }
+    if (!m){
 		return;
 	}
 	if (mp){
@@ -322,13 +332,16 @@ void VPlayer::setMedia(QString file, bool manually)
 	if (!mp){
 		return;
 	}
+    //#if defined(Q_OS_MAC) // Mac
+    //  libvlc_media_player_set_nsobject(mp, (void *)Interface::instance()->winId());
+    //#endif
 	libvlc_event_manager_t *man = libvlc_media_player_event_manager(mp);
-	libvlc_event_attach(man,
-		libvlc_MediaPlayerPlaying,
-		sta, nullptr);
-	libvlc_event_attach(man,
-		libvlc_MediaPlayerTimeChanged,
-		mid, nullptr);
+    libvlc_event_attach(man,
+        libvlc_MediaPlayerPlaying,
+        sta, nullptr);
+    libvlc_event_attach(man,
+        libvlc_MediaPlayerTimeChanged,
+        mid, nullptr);
 	libvlc_event_attach(man,
 		libvlc_MediaPlayerPaused,
 		hal, nullptr);

@@ -53,6 +53,8 @@ class Interface :public QWidget
 	Q_OBJECT
 public:
 	explicit Interface(QWidget *parent = 0);
+    static Interface *ins;
+    static Interface *instance();
 
 private:
 	QTimer *timer;
@@ -87,6 +89,7 @@ private:
 
 	bool showprg;
 	bool sliding;
+    bool twiceFlag;
 
 	virtual void closeEvent(QCloseEvent *e) override;
 	virtual void dragEnterEvent(QDragEnterEvent *e) override;

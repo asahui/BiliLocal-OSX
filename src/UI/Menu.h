@@ -52,14 +52,17 @@ namespace UI
 		bool isStay;
 		bool isPoped;
 		QLineEdit *fileL;
+        QLineEdit *pathL;
 		QLineEdit *danmL;
 		QLineEdit *sechL;
 		QCompleter *fileC;
 		QCompleter *danmC;
 		QPushButton *fileB;
+        QPushButton *pathB;
 		QPushButton *danmB;
 		QPushButton *sechB;
 		QAction *fileA;
+        QAction *pathA;
 		QAction *danmA;
 		QAction *sechA;
 		QLabel *alphaT;
@@ -68,6 +71,8 @@ namespace UI
 		QLineEdit *delayL;
 		QLabel *localT;
 		QCheckBox *localC;
+        QLabel *localFileT;
+        QCheckBox *localFileC;
 		QLabel *subT;
 		QCheckBox *subC;
 		QLabel *loopT;

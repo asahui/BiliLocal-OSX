@@ -90,6 +90,9 @@ public:
 	}
 };
 
+
+// No need to be a class, like global function and constant value
+// but enclosed in a namespace
 namespace Utils
 {
 	enum Site

@@ -84,7 +84,7 @@ QWidget(parent)
 
 	aplayer = APlayer::instance();
 	danmaku = Danmaku::instance();
-	arender = ARender::instance();
+    arender = ARender::instance();
 	Local::objects["Danmaku"] = danmaku;
 	Local::objects["APlayer"] = aplayer;
 	Local::objects["ARender"] = arender;
@@ -92,8 +92,8 @@ QWidget(parent)
 	Local::objects["Shield"] = Shield::instance();
 
 	menu = new Menu(this);
-	info = new Info(this);
-	jump = new UI::Jump(this);
+    info = new Info(this);
+    jump = new UI::Jump(this);
 	type = new UI::Type(this);
 	list = List::instance();
 	load = Load::instance();
@@ -219,6 +219,7 @@ QWidget(parent)
 	connect(seek, &Seek::errorOccured, this, alertNetworkError);
 
 	showprg = sliding = false;
+    twiceFlag = false;
 	connect(aplayer, &APlayer::timeChanged, [this](qint64 t){
 		if (!sliding&&aplayer->getState() != APlayer::Stop){
 			arender->setDisplayTime(showprg ? t / (double)aplayer->getDuration() : -1);
@@ -441,6 +442,10 @@ QWidget(parent)
 
 void Interface::closeEvent(QCloseEvent *e)
 {
+    if (twiceFlag) {
+        return;
+    }
+    twiceFlag = true;
 	if (aplayer->getState() == APlayer::Stop&&!isFullScreen() && !isMaximized()){
 		QString conf = Config::getValue("/Interface/Size", QString("720,405"));
 		QString size = QString("%1,%2").arg(width() * 72 / logicalDpiX()).arg(height() * 72 / logicalDpiY());
@@ -469,7 +474,7 @@ void Interface::dropEvent(QDropEvent *e)
 
 void Interface::mouseDoubleClickEvent(QMouseEvent *e)
 {
-	if (!menu->isShown() && !info->isShown()){
+    if (!menu->isShown() && !info->isShown()){
 		fullA->toggle();
 	}
 	QWidget::mouseDoubleClickEvent(e);

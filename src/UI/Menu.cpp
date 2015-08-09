@@ -36,6 +36,7 @@
 #include "../Render/ARender.h"
 #include "../UI/Search.h"
 #include <numeric>
+#include <QDebug>
 
 using namespace UI;
 
@@ -167,20 +168,27 @@ namespace{
 	{
 	public:
 		explicit FileEdit(QCompleter *completer, QWidget *parent = 0) :
-			QLineEdit(parent), select(false), completer(completer)
+            QLineEdit(parent), select(false), completer(completer), localFlag(true)
 		{
 			connect(this, &QLineEdit::selectionChanged, [this](){
 				select = 0;
 			});
 		}
 
+        void setLocalFlag(bool l) {
+            localFlag = l;
+        }
+
 	private:
 		bool select;
 		QCompleter *completer;
+        bool localFlag;
 
 		void mousePressEvent(QMouseEvent *e)
 		{
-			if (e->button() == Qt::LeftButton){
+            qDebug() << "Press:" << localFlag;
+            if (localFlag && e->button() == Qt::LeftButton){
+                qDebug() << "Press: into LeftButton";
 				select = 1;
 			}
 			QLineEdit::mousePressEvent(e);
@@ -188,7 +196,9 @@ namespace{
 
 		void mouseReleaseEvent(QMouseEvent *e)
 		{
-			if (e->button() == Qt::LeftButton){
+            qDebug() << "Release:" << localFlag;
+            if (localFlag && e->button() == Qt::LeftButton){
+                qDebug() << "Release: Into leftbutton";
 				if (select){
 					completer->complete();
 					completer->popup()->setCurrentIndex(completer->model()->index(0, 0));
@@ -353,13 +363,16 @@ QWidget(parent)
 	LoadProxyModel *danmM = new LoadProxyModel(this);
 	danmC = new QCompleter(danmM, this);
 	fileL = new FileEdit(fileC, this);
+    pathL = new QLineEdit(this);
 	danmL = new DanmEdit(danmC, this);
 	sechL = new QLineEdit(this);
 	fileL->installEventFilter(this);
 	danmL->installEventFilter(this);
 	sechL->installEventFilter(this);
-	fileL->setReadOnly(true);
+    fileL->setReadOnly(true);
 	fileL->setPlaceholderText(tr("choose a local media"));
+    //static_cast<FileEdit *>(fileL)->setLocalFlag(Config::getValue("/Danmaku/LocalFile", true));
+    pathL->setPlaceholderText(tr("input url address"));
 	danmL->setPlaceholderText(tr("input av/ac number"));
 	sechL->setPlaceholderText(tr("search danmaku online"));
 	QAbstractItemView *popup;
@@ -391,13 +404,17 @@ QWidget(parent)
 		Load::instance()->loadDanmaku(danmM->mapToSource(qobject_cast<QAbstractProxyModel *>(danmC->completionModel())->mapToSource(index)));
 	});
 	fileB = new QPushButton(this);
+    pathB = new QPushButton(this);
 	sechB = new QPushButton(this);
 	danmB = new QPushButton(this);
 	fileB->setText(tr("Open"));
+    pathB->setText(tr("URI"));
 	danmB->setText(tr("Load"));
 	sechB->setText(tr("Seek"));
 	fileA = new QAction(tr("Open File"), this);
 	fileA->setObjectName("File");
+    pathA = new QAction(tr("Open URI"), this);
+    pathA->setObjectName("URI");
 	fileA->setShortcut(Config::getValue("/Shortcut/File", QString()));
 	danmA = new QAction(tr("Load Danmaku"), this);
 	danmA->setObjectName("Danm");
@@ -406,14 +423,24 @@ QWidget(parent)
 	sechA->setObjectName("Sech");
 	sechA->setShortcut(Config::getValue("/Shortcut/Sech", QString()));
 	connect(fileA, &QAction::triggered, [this](){
-		QString _file = QFileDialog::getOpenFileName(lApp->mainWidget(),
-			tr("Open File"),
-			List::instance()->defaultPath(Utils::Video | Utils::Audio),
-			tr("Media files (%1);;All files (*.*)").arg(Utils::getSuffix(Utils::Video | Utils::Audio, "*.%1").join(' ')));
-		if (!_file.isEmpty()){
-			APlayer::instance()->setMedia(_file);
-		}
+        if (Config::getValue("/Danmaku/LocalFile", true)){
+            QString _file = QFileDialog::getOpenFileName(lApp->mainWidget(),
+                tr("Open File"),
+                List::instance()->defaultPath(Utils::Video | Utils::Audio),
+                tr("Media files (%1);;All files (*.*)").arg(Utils::getSuffix(Utils::Video | Utils::Audio, "*.%1").join(' ')));
+            if (!_file.isEmpty()){
+                APlayer::instance()->setMedia(_file);
+            }
+        } else {
+            // get bili true link
+        }
 	});
+    connect(pathA, &QAction::triggered, [this](){
+        pathL->setText(pathL->text().simplified());
+        if (!pathL->text().isEmpty()) {
+            APlayer::instance()->setMedia(pathL->text());
+        }
+    });
 	connect(danmA, &QAction::triggered, [this](){
 		if (Config::getValue("/Danmaku/Local", false)){
 			QString _file = QFileDialog::getOpenFileName(lApp->mainWidget(),
@@ -448,9 +475,11 @@ QWidget(parent)
 		sechL->setFocus();
 	});
 	addAction(fileA);
+    addAction(pathA);
 	addAction(danmA);
 	addAction(sechA);
 	connect(fileB, &QPushButton::clicked, fileA, &QAction::trigger);
+    connect(pathB, &QPushButton::clicked, pathA, &QAction::trigger);
 	connect(danmB, &QPushButton::clicked, danmA, &QAction::trigger);
 	connect(sechB, &QPushButton::clicked, sechA, &QAction::trigger);
 	connect(danmL, &QLineEdit::returnPressed, danmA, &QAction::trigger);
@@ -492,9 +521,23 @@ QWidget(parent)
 		Config::setValue("/Danmaku/Local", local);
 	});
 	localC->setChecked(Config::getValue("/Danmaku/Local", false));
+    localFileT = new QLabel(this);
+    localFileT->setText(tr("Local File"));
+    localFileC = new QCheckBox(this);
+    localFileC->setCheckState(Qt::Checked);
+    connect(localFileC, &QCheckBox::stateChanged, [this](int state){
+       bool local = state == Qt::Checked;
+       fileL->clear();
+       fileL->setReadOnly(local);
+       fileB->setText(local ? tr("Open") : tr("Load"));
+       fileL->setPlaceholderText(local ? tr("choose a local file") : tr("input av/ac number"));
+       static_cast<FileEdit *>(fileL)->setLocalFlag(local);
+       Config::setValue("/Danmaku/LocalFile", local);
+    });
+    localFileC->setChecked(Config::getValue("/Danmaku/LocalFile", true));
 	subT = new QLabel(this);
 	subT->setText(tr("Protect Sub"));
-	subC = new QCheckBox(this);
+    subC = new QCheckBox(this);
 	subC->setChecked(Config::getValue("/Danmaku/Protect", false));
 	connect(subC, &QCheckBox::stateChanged, [this](int state){
 		Config::setValue("/Danmaku/Protect", state == Qt::Checked);
@@ -538,7 +581,7 @@ QWidget(parent)
 				danmC->popup()->setCurrentIndex(QModelIndex());
 			}
 		case Load::File:
-			localC->setChecked(task->request.url().isLocalFile());
+            localC->setChecked(task->request.url().isLocalFile());
 			syncDanmL();
 		case Load::Code:
 			isStay = 1;
@@ -562,8 +605,14 @@ QWidget(parent)
 		}
 	});
 	connect(APlayer::instance(), &APlayer::mediaChanged, [this](QString _file){
-		fileL->setText(QFileInfo(_file).fileName());
-		fileL->setCursorPosition(0);
+        if (QFileInfo(_file).isFile()) {
+            fileL->setText(QFileInfo(_file).fileName());
+            fileL->setCursorPosition(0);
+        } else {
+
+        }
+
+
 	});
 	hide();
 }
@@ -589,6 +638,10 @@ void Menu::resizeEvent(QResizeEvent *e)
 	localC->setGeometry(o, 20.00*y, l, 2.08*y);
 	subC->setGeometry(o, 22.92*y, l, 2.08*y);
 	loopC->setGeometry(o, 25.83*y, l, 2.08*y);
+    localFileT->setGeometry(0.83*x, 28.75*y, w - 1.67*x, 2.08*y);
+    localFileC->setGeometry(o, 28.75*y, l, 2.08*y);
+    pathL->setGeometry(0.83*x, 31.67*y, w - 5.65*x, 2.08*y);
+    pathB->setGeometry(w - 4.44*x, 31.67*y, 3.60*x, 2.08*y);
 }
 
 bool Menu::eventFilter(QObject *o, QEvent *e)
