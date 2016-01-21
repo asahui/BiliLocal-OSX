@@ -24,6 +24,7 @@
 *
 =========================================================================*/
 
+#include "Common.h"
 #include "Seek.h"
 #include "AccessPrivate.h"
 #include "../Utils.h"
@@ -72,7 +73,7 @@ public:
 		QPixmap icon;
 		if (icon.loadFromData(reply->readAll())){
 			icon = icon.scaled(task->cover, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-            praseItem(reply->request())->setIcon(icon);
+			praseItem(reply->request())->setIcon(icon);
 		}
 	}
 };
@@ -196,17 +197,15 @@ Seek::Seek(QObject *parent) : QObject(parent), d_ptr(new SeekPrivate(this))
 				r.setPatternOptions(QRegularExpression::DotMatchesEverythingOption);
 				r.setPattern("av\\d+");
 				m = r.match(item);
-				bool isBangumi = !m.hasMatch();
+				bool isSeason = !m.hasMatch();
 				line[0]->setData(m.captured(), Qt::UserRole);
 				line[0]->setSizeHint(QSize(0, task.cover.height() + 3));
 				r.setPattern("(?<=src=\")[^\"']+");
-				m = r.match(item, isBangumi ? 0 : m.capturedEnd());
-                qDebug() << m.captured();
-
+				m = r.match(item, isSeason ? 0 : m.capturedEnd());
 				QNetworkRequest request(m.captured());
 				request.setAttribute(QNetworkRequest::User, (quintptr)line[0]);
 				images[&task].append(request);
-				if (isBangumi){
+				if (isSeason){
 					r.setPattern("(?<=<div class=\"t\">).*?(?=</div>)");
 					m = r.match(item, m.capturedEnd());
 					line[3]->setText(Utils::decodeXml(m.captured()));
@@ -477,7 +476,6 @@ QStringList Seek::modules()
 void Seek::dequeue()
 {
 	Q_D(Seek);
-    Task* t = d->getHead();
 	d->dequeue();
 }
 
