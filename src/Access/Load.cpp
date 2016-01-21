@@ -24,14 +24,13 @@
 *
 =========================================================================*/
 
-#include <Python.h>
-#undef B0
 #include "Load.h"
 #include "AccessPrivate.h"
 #include "../Config.h"
 #include "../Utils.h"
 #include "../Model/Danmaku.h"
 #include "../Player/APlayer.h"
+#include "../Model/List.h"
 
 Load *Load::ins = nullptr;
 
@@ -441,57 +440,12 @@ Load::Load(QObject *parent) : QObject(parent), d_ptr(new LoadPrivate(this))
 					api = api.arg(Utils::customUrl(Utils::Bilibili));
 					forward(QNetworkRequest(api.arg(id)), File);
 				}
-				else{
-                    Py_Initialize();
-                    if ( !Py_IsInitialized() )
-                    {
-                        qDebug() << "Cant initialize python!";
-                        emit stateChanged(203);
-                        dequeue();
-                    }
-
-                    PyRun_SimpleString("import sys");
-                    PyRun_SimpleString("sys.path.append('./')");
-                    //PyObject* pResult = PyRun_SimpleString("print sys.path");
-                    PyObject* pModule = PyImport_ImportModule("biliId");
-                    if (!pModule) {
-                            qDebug() << "Can't open python file!";
-                            emit stateChanged(203);
-                            dequeue();
-                            break;
-                    }
-
-                    PyObject* pFunGetCid= PyObject_GetAttrString(pModule,"getCid");
-                    if(!pFunGetCid){
-                            qDebug() << "Get function getCid failed";
-                            emit stateChanged(203);
-                            dequeue();
-                            break;
-                    }
-                    qDebug() << task.request.url().toString();
-                    //PyObject *pArgs = PyTuple_New(1);
-                    //PyTuple_SetItem(pArgs, 0, Py_BuildValue("s", task.request.url().toString().toStdString().c_str()));
-                    //调用函数
-                    PyObject* pResult = PyObject_CallFunction(pFunGetCid, "s", task.request.url().toString().toStdString().c_str());
-                    qDebug() << "after call";
-                    int cid = 0;
-                    PyArg_Parse(pResult, "i", &cid);
-
-                    qDebug() << cid;
-                    //结束，释放python
-                    Py_Finalize();
-
-                    if (cid != 0){
-                        api = "http://comment.%1/%2.xml";
-                        api = api.arg(Utils::customUrl(Utils::Bilibili));
-                        forward(QNetworkRequest(api.arg(QString::number(cid))), File);
-                    } else {
-
-                        emit stateChanged(203);
-                        dequeue();
-                    }
-				}
-			}
+                else{
+                    emit stateChanged(203);
+                    qDebug() << "Fail to load danmaku, try biliApi";
+                    dequeue();
+                }
+            }
 			break;
 		}
 		case File:
@@ -1175,4 +1129,35 @@ Load::Task *Load::getHead()
 {
 	Q_D(Load);
 	return d->getHead();
+}
+
+void Load::loadURL(QString code)
+{
+    code.prepend("url");
+    const Task &task = codeToTask(code);
+    enqueue(task);
+}
+
+void Load::setMedia(const QStringList urlList, const QString title)
+{
+    if (urlList.isEmpty()) {
+        return;
+    }
+    APlayer::instance()->setMedia(urlList[0]);
+
+    List *list = List::instance();
+    list->removeRow(list->rowCount()-1);
+    int count = 1;
+    QModelIndexList indexes;
+
+    for (const QString &url : urlList) {
+        QStandardItem *i = new QStandardItem;
+        i->setText(title + QString::number(count));
+        i->setData(url, List::FileRole);
+        i->setEditable(false); i->setDropEnabled(false);
+        list->appendRow(i);
+        indexes.append(i->index());
+        count++;
+    }
+    list->merge(indexes);
 }

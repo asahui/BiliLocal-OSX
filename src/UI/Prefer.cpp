@@ -1125,7 +1125,7 @@ QDialog(parent)
 		plugin->setColumnWidth(1, 60 * s);
 		plugin->setColumnWidth(2, 35 * s);
 		plugin->setColumnWidth(4, 50 * s);
-		plugin->setColumnWidth(5, 30 * s);
+        plugin->setColumnWidth(5, 60 * s);
 		plugin->setIndentation(15);
 		w->addWidget(plugin);
 		for (Plugin &iter : Plugin::plugins){
@@ -1135,7 +1135,7 @@ QDialog(parent)
 			content += iter.string("Version");
 			content += iter.string("Description");
 			content += iter.string("Author");
-			content += tr("options");
+            content += tr("options");
 			QTreeWidgetItem *row = new QTreeWidgetItem(plugin, content);
 			row->setCheckState(0, Config::getValue("/Plugin/" + iter.string("Name"), true) ? Qt::Checked : Qt::Unchecked);
 			row->setData(0, Qt::UserRole, (quintptr)&iter);

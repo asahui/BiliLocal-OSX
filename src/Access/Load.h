@@ -111,4 +111,7 @@ public slots:
 	void dequeue();
 	bool enqueue(const Load::Task &);
 	Load::Task *getHead();
+
+    void loadURL(QString);
+    void setMedia(const QStringList, const QString title);
 };

@@ -2,7 +2,8 @@ QT += \
     core \
     gui \
     network \
-    widgets
+    widgets \
+    xml
 
 TARGET = BiliLocal
 
@@ -195,8 +196,6 @@ ICON = BiliLocal.icns
 
 LIBS += -L$$PWD/dep/lib/
 INCLUDEPATH += dep/include/ 
-INCLUDEPATH += /opt/local/Library/Frameworks/Python.framework/Versions/3.4/include/python3.4m
-LIBS += -L/opt/local/Library/Frameworks/Python.framework/Versions/3.4/lib/ -lpython3.4
 # INCLUDEPATH += dep/include/ffmpeg
 DEPENDPATH += dep/include/ 
 # DEPENDPATH += dep/include/ffmpeg
