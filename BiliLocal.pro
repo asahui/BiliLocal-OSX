@@ -140,6 +140,10 @@ DEFINES += \
 DEFINES += \
 #    RENDER_RASTER \
     RENDER_OPENGL
+
+LIBS += \
+    -lcrypto \
+    -lssl
 }
 
 contains(DEFINES, BACKEND_VLC){
