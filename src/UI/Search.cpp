@@ -28,20 +28,34 @@
 #include "Search.h"
 #include "../Access/Seek.h"
 #include "../Utils.h"
+#include "../Local.h"
 
 using namespace UI;
 
+Search* Search::ins = nullptr;
+
+Search* Search::instance() {
+    return ins ? ins : new Search(lApp->mainWidget());
+}
+
 Search::Search(QWidget *parent) : QDialog(parent)
 {
+    ins = this;
 	isWaiting = false;
 	pageNum = pageCur = -1;
-	resultM = new QStandardItemModel(this);
+    /*
+     *
+     * !!!!! resultM is a child of Search Dialog
+     * When Dialog is destroyed, all its child will be destroyed
+     * From Menu.cpp, Search Dialog is living in the block of trigger function
+     *
+     */
+    resultM = new QStandardItemModel(this);
 	double x = logicalDpiX() / 72.0, y = logicalDpiY() / 72.0;
 	auto outerLayout = new QVBoxLayout;
 
 	//Head
 	auto keywdLayout = new QHBoxLayout;
-
 	keywE = new QLineEdit(this);
 	keywdLayout->addWidget(keywE);
 
@@ -194,7 +208,12 @@ Search::Search(QWidget *parent) : QDialog(parent)
 	setWindowTitle(tr("Search"));
 	setMinimumSize(450 * x, 300 * y);
 	resize(675 * x, 390 * y);
-	Utils::setCenter(this);
+    Utils::setCenter(this);
+}
+
+Search::~Search()
+{
+    //qDebug() << "Destroying search dialog";
 }
 
 void Search::setKey(QString key)

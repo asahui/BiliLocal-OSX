@@ -42,6 +42,7 @@
 #include "../UI/Menu.h"
 #include "../UI/Prefer.h"
 #include "../UI/Type.h"
+#include "../UI/Search.h"
 #include <functional>
 
 using namespace UI;
@@ -95,6 +96,7 @@ QWidget(parent)
     info = new Info(this);
     jump = new UI::Jump(this);
 	type = new UI::Type(this);
+    search = UI::Search::instance();
 	list = List::instance();
 	load = Load::instance();
 	post = Post::instance();
@@ -103,8 +105,10 @@ QWidget(parent)
 	Local::objects["Menu"] = menu;
 	Local::objects["Next"] = list;
 	Local::objects["Load"] = load;
+    qDebug() << "Interface Load:" << load;
 	Local::objects["Post"] = post;
 	Local::objects["Seek"] = seek;
+    Local::objects["Search"] = search;
 
 	timer = new QTimer(this);
 	delay = new QTimer(this);

@@ -186,9 +186,7 @@ namespace{
 
 		void mousePressEvent(QMouseEvent *e)
 		{
-            qDebug() << "Press:" << localFlag;
             if (localFlag && e->button() == Qt::LeftButton){
-                qDebug() << "Press: into LeftButton";
 				select = 1;
 			}
 			QLineEdit::mousePressEvent(e);
@@ -196,9 +194,7 @@ namespace{
 
 		void mouseReleaseEvent(QMouseEvent *e)
 		{
-            qDebug() << "Release:" << localFlag;
             if (localFlag && e->button() == Qt::LeftButton){
-                qDebug() << "Release: Into leftbutton";
 				if (select){
 					completer->complete();
 					completer->popup()->setCurrentIndex(completer->model()->index(0, 0));
@@ -433,6 +429,9 @@ QWidget(parent)
             }
         } else {
             // get bili true link
+            if (!fileL->text().isEmpty()) {
+                Load::instance()->loadURL(fileL->text());
+            }
         }
 	});
     connect(pathA, &QAction::triggered, [this](){
@@ -460,19 +459,22 @@ QWidget(parent)
 			else{
 				Load::instance()->loadDanmaku(static_cast<DanmEdit *>(danmL)->getCode());
 			}
-		}
+        }
 	});
 	connect(sechA, &QAction::triggered, [this](){
-		Search searchBox(lApp->mainWidget());
-		sechL->setText(sechL->text().simplified());
-		if (!sechL->text().isEmpty()){
-			searchBox.setKey(sechL->text());
-		}
-		if (searchBox.exec()) {
-			Load::instance()->loadDanmaku(searchBox.getAid());
-		}
-		sechL->setText(searchBox.getKey());
-		sechL->setFocus();
+            Search *  searchBox = Search::instance();
+            sechL->setText(sechL->text().simplified());
+            if (!sechL->text().isEmpty()){
+                searchBox->setKey(sechL->text());
+            }
+            Utils::setCenter(searchBox);
+            if (searchBox->exec()) {
+                Load::instance()->loadDanmaku(searchBox->getAid());
+            }
+            sechL->setText(searchBox->getKey());
+            sechL->setFocus();
+
+
 	});
 	addAction(fileA);
     addAction(pathA);
@@ -506,6 +508,7 @@ QWidget(parent)
 	localT = new QLabel(this);
 	localT->setText(tr("Local Danmaku"));
 	localC = new QCheckBox(this);
+
 	connect(localC, &QCheckBox::stateChanged, [this](int state){
 		bool local = state == Qt::Checked;
 		danmL->clear();

@@ -46,6 +46,7 @@ namespace UI
 	class Info;
 	class Jump;
 	class Type;
+    class Search;
 }
 
 class Interface :public QWidget
@@ -79,6 +80,7 @@ private:
 	Load *load;
 	Post *post;
 	Seek *seek;
+    UI::Search *search;
 	APlayer *aplayer;
 	Danmaku *danmaku;
 	ARender *arender;

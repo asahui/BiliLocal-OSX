@@ -36,9 +36,12 @@ namespace UI
 	{
 		Q_OBJECT
 	public:
-		explicit Search(QWidget *parent = 0);
+        static Search* instance();
+        ~Search();
 
 	private:
+        static Search* ins;
+        explicit Search(QWidget *parent = 0);
 		QLabel *statusL;
 		QLabel *pageT;
 		QLabel *pageL;
