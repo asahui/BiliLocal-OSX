@@ -212,9 +212,9 @@ HEADERS += \
 ICON = BiliLocal.icns
 
 LIBS += -L$$PWD/dep/lib/
-INCLUDEPATH += dep/include/ 
+INCLUDEPATH += dep/include/
 # INCLUDEPATH += dep/include/ffmpeg
-DEPENDPATH += dep/include/ 
+DEPENDPATH += dep/include/
 # DEPENDPATH += dep/include/ffmpeg
 
 

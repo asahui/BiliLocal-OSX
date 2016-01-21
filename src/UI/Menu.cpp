@@ -360,7 +360,7 @@ QWidget(parent)
 	LoadProxyModel *danmM = new LoadProxyModel(this);
 	danmC = new QCompleter(danmM, this);
 	fileL = new FileEdit(fileC, this);
-    pathL = new QLineEdit(this);
+
 	danmL = new DanmEdit(danmC, this);
 	sechL = new QLineEdit(this);
 	fileL->installEventFilter(this);
@@ -369,7 +369,7 @@ QWidget(parent)
     fileL->setReadOnly(true);
 	fileL->setPlaceholderText(tr("choose a local media"));
     //static_cast<FileEdit *>(fileL)->setLocalFlag(Config::getValue("/Danmaku/LocalFile", true));
-    pathL->setPlaceholderText(tr("input url address"));
+
 	danmL->setPlaceholderText(tr("input av/ac number"));
 	sechL->setPlaceholderText(tr("search danmaku online"));
 	QAbstractItemView *popup;
@@ -401,17 +401,16 @@ QWidget(parent)
 		Load::instance()->loadDanmaku(danmM->mapToSource(qobject_cast<QAbstractProxyModel *>(danmC->completionModel())->mapToSource(index)));
 	});
 	fileB = new QPushButton(this);
-    pathB = new QPushButton(this);
+
 	sechB = new QPushButton(this);
 	danmB = new QPushButton(this);
 	fileB->setText(tr("Open"));
-    pathB->setText(tr("URI"));
+
 	danmB->setText(tr("Load"));
 	sechB->setText(tr("Seek"));
 	fileA = new QAction(tr("Open File"), this);
 	fileA->setObjectName("File");
-    pathA = new QAction(tr("Open URI"), this);
-    pathA->setObjectName("URI");
+
 	fileA->setShortcut(Config::getValue("/Shortcut/File", QString()));
 	danmA = new QAction(tr("Load Danmaku"), this);
 	danmA->setObjectName("Danm");
@@ -435,12 +434,7 @@ QWidget(parent)
             }
         }
 	});
-    connect(pathA, &QAction::triggered, [this](){
-        pathL->setText(pathL->text().simplified());
-        if (!pathL->text().isEmpty()) {
-            APlayer::instance()->setMedia(pathL->text());
-        }
-    });
+
 	connect(danmA, &QAction::triggered, [this](){
 		if (Config::getValue("/Danmaku/Local", false)){
 			QString _file = QFileDialog::getOpenFileName(lApp->mainWidget(),
@@ -478,11 +472,9 @@ QWidget(parent)
 
 	});
 	addAction(fileA);
-    addAction(pathA);
 	addAction(danmA);
 	addAction(sechA);
 	connect(fileB, &QPushButton::clicked, fileA, &QAction::trigger);
-    connect(pathB, &QPushButton::clicked, pathA, &QAction::trigger);
 	connect(danmB, &QPushButton::clicked, danmA, &QAction::trigger);
 	connect(sechB, &QPushButton::clicked, sechA, &QAction::trigger);
 	connect(danmL, &QLineEdit::returnPressed, danmA, &QAction::trigger);
@@ -644,8 +636,6 @@ void Menu::resizeEvent(QResizeEvent *e)
 	loopC->setGeometry(o, 25.83*y, l, 2.08*y);
     localFileT->setGeometry(0.83*x, 28.75*y, w - 1.67*x, 2.08*y);
     localFileC->setGeometry(o, 28.75*y, l, 2.08*y);
-    pathL->setGeometry(0.83*x, 31.67*y, w - 5.65*x, 2.08*y);
-    pathB->setGeometry(w - 4.44*x, 31.67*y, 3.60*x, 2.08*y);
 }
 
 bool Menu::eventFilter(QObject *o, QEvent *e)
