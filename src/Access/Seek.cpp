@@ -181,8 +181,7 @@ Seek::Seek(QObject *parent) : QObject(parent), d_ptr(new SeekPrivate(this))
 			task.model->horizontalHeaderItem(5)->setData(75, Qt::UserRole);
 			const QByteArray &data = reply->readAll();
 			auto page = QTextCodec::codecForHtml(data, QTextCodec::codecForName("UTF-8"))->toUnicode(data);
-
-            auto list = page.split(QRegularExpression("<li class=\"list\\W"), QString::SkipEmptyParts);
+            auto list = page.split(QRegularExpression("<li class=\"video\\W"), QString::SkipEmptyParts);
 			if (2 > list.size()) break;
 			QString &last = list.last();
 			last.truncate(last.indexOf("</li>") + 5);
@@ -211,9 +210,9 @@ Seek::Seek(QObject *parent) : QObject(parent), d_ptr(new SeekPrivate(this))
 					line[3]->setText(Utils::decodeXml(m.captured()));
 				}
 				else{
-                    r.setPattern("class=\"tag[^>]+>");
+                    r.setPattern("class=\"type[^>]+>");
                     m = r.match(item, m.capturedEnd());
-                    r.setPattern(".*?(?=</a>)");
+                    r.setPattern(".*?(?=</span>)");
                     m = r.match(item, m.capturedEnd());
                     line[4]->setText(m.captured().trimmed());
                     r.setPattern("(?<=title=\")[^\"']+");
