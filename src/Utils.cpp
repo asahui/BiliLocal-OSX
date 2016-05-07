@@ -319,7 +319,7 @@ QString Utils::customUrl(Site site)
 		return QString();
 	}
 	QStringList urls, defs;
-	defs << "acfun.tv" << "bilibili.com" << "tucao.cc";
+	defs << "acfun.tv" << "bilibili.com" << "tucao.tv";
 	urls = Config::getValue("/Network/Url", defs.join(';')).split(';', QString::SkipEmptyParts);
 	for (QString iter : urls + defs){
 		if (iter.toLower().indexOf(name) != -1){
@@ -329,82 +329,237 @@ QString Utils::customUrl(Site site)
 	return QString();
 }
 
-QString Utils::decodeXml(QString string, bool fast)
+QString Utils::decodeTxt(const QByteArray &data)
 {
-	if (!fast){
-		QTextDocument text;
-		text.setHtml(string);
-		return text.toPlainText();
-	}
-	QString fixed;
-	fixed.reserve(string.length());
-	int i = 0, l = string.length();
-	for (i = 0; i < l; ++i){
-		QChar c = string[i];
-		if (c >= ' ' || c == '\n'){
-			bool f = true;
-			switch (c.unicode()){
-			case '&':
-				if (l - i >= 4){
-					switch (string[i + 1].unicode()){
-					case 'l':
-						if (string[i + 2] == 't'&&string[i + 3] == ';'){
-							fixed += '<';
-							f = false;
-							i += 3;
-						}
-						break;
-					case 'g':
-						if (string[i + 2] == 't'&&string[i + 3] == ';'){
-							fixed += '>';
-							f = false;
-							i += 3;
-						}
-						break;
-					case 'a':
-						if (l - i >= 5 && string[i + 2] == 'm'&&string[i + 3] == 'p'&&string[i + 4] == ';'){
-							fixed += '&';
-							f = false;
-							i += 4;
-						}
-						break;
-					case 'q':
-						if (l - i >= 6 && string[i + 2] == 'u'&&string[i + 3] == 'o'&&string[i + 4] == 't'&&string[i + 5] == ';'){
-							fixed += '\"';
-							f = false;
-							i += 5;
-						}
-						break;
+	QTextCodec *codec = QTextCodec::codecForUtfText(data, nullptr);
+	if (!codec) {
+		QByteArray name;
+		QByteArray head = data.left(512).toLower();
+		if (head.startsWith("<?xml")) {
+			int pos = head.indexOf("encoding=");
+			if (pos >= 0) {
+				pos += 9;
+				if (pos < head.size()) {
+					auto c = head.at(pos);
+					if ('\"' == c || '\'' == c) {
+						++pos;
+						name = head.mid(pos, head.indexOf(c, pos) - pos);
 					}
 				}
-				break;
-			case '/':
-			case '\\':
-				if (l - i >= 2){
-					switch (string[i + 1].unicode()){
-					case 'n':
-						fixed += '\n';
-						f = false;
-						i += 1;
-						break;
-					case 't':
-						fixed += '\t';
-						f = false;
-						i += 1;
-						break;
-					case '\"':
-						fixed += '\"';
-						f = false;
-						i += 1;
-						break;
-					}
-				}
-				break;
-			}
-			if (f){
-				fixed += c;
 			}
 		}
+		else {
+			int pos = head.indexOf("charset=", head.indexOf("meta "));
+			if (pos >= 0) {
+				pos += 8;
+				int end = pos;
+				while (++end < head.size()) {
+					auto c = head.at(end);
+					if (c == '\"' || c == '\'' || c == '>') {
+						name = head.mid(pos, end - pos);
+						break;
+					}
+				}
+			}
+		}
+		codec = QTextCodec::codecForName(name);
+	}
+	if (!codec) {
+		codec = QTextCodec::codecForLocale();
+	}
+	return codec->toUnicode(data);
+}
+
+QString Utils::decodeXml(QString string, bool fast)
+{
+	if (fast) {
+		return decodeXml(QStringRef(&string), true);
+	}
+
+	QTextDocument text;
+	text.setHtml(string);
+	return text.toPlainText();
+}
+
+namespace
+{
+	template<char16_t... list>
+	struct String;
+
+	template<char16_t tail>
+	struct String<tail>
+	{
+		inline static bool equalTo(const char16_t *string, int offset)
+		{
+			return string[offset] == tail;
+		}
+	};
+
+	template<char16_t head, char16_t... rest>
+	struct String<head, rest...>
+	{
+		inline static bool equalTo(const char16_t *string, int offset)
+		{
+			return string[offset] == head && String<rest...>::equalTo(string, offset + 1);
+		}
+	};
+
+	template<char16_t... list>
+	inline bool equal(const char16_t *string, int length, int offset)
+	{
+		return offset + (int)sizeof...(list) < length && String<list...>::equalTo(string, offset);
+	}
+
+	int decodeHtmlEscape(const char16_t *data, int length, int i, char16_t &c)
+	{
+		if (i + 1 >= length) {
+			return 0;
+		}
+
+		switch (data[i]) {
+		case 'n':
+			// &nbsp;
+			if (equal<'b', 's', 'p', ';'>(data, length, i + 1)) {
+				c = ' ';
+				return 5;
+			}
+			break;
+		case 'l':
+			// &lt;
+			if (equal<'t', ';'>(data, length, i + 1)) {
+				c = '<';
+				return 3;
+			}
+			break;
+		case 'g':
+			// &gt;
+			if (equal<'t', ';'>(data, length, i + 1)) {
+				c = '>';
+				return 3;
+			}
+			break;
+		case 'a':
+			// &amp;
+			if (equal<'m', 'p', ';'>(data, length, i + 1)) {
+				c = '&';
+				return 4;
+			}
+			break;
+		case 'q':
+			// &quot;
+			if (equal<'u', 'o', 't', ';'>(data, length, i + 1)) {
+				c = '\"';
+				return 5;
+			}
+			break;
+		case 'c':
+			// &copy;
+			if (equal<'o', 'p', 'y', ';'>(data, length, i + 1)) {
+				c = u'©';
+				return 5;
+			}
+			break;
+		case 'r':
+			// &reg;
+			if (equal<'e', 'g', ';'>(data, length, i + 1)) {
+				c = u'®';
+				return 4;
+			}
+			break;
+		case 't':
+			// &times;
+			if (equal<'i', 'm', 'e', 's', ';'>(data, length, i + 1)) {
+				c = u'×';
+				return 6;
+			}
+			break;
+		case 'd':
+			// &divide;
+			if (equal<'i', 'v', 'i', 'd', 'e', ';'>(data, length, i + 1)) {
+				c = u'÷';
+				return 7;
+			}
+			break;
+		}
+
+		return 0;
+	}
+
+	int decodeCharEscape(const char16_t *data, int length, int i, char16_t &c)
+	{
+		if (i + 1 >= length) {
+			return 0;
+		}
+
+		switch (data[i]) {
+		case 'n':
+			c = '\n';
+			return 1;
+		case 't':
+			c = '\t';
+			return 1;
+		case '\"':
+			c = '\"';
+			return 1;
+		}
+
+		return 0;
+	}
+}
+
+QString Utils::decodeXml(QStringRef ref, bool fast)
+{
+	if (!fast) {
+		return decodeXml(ref.toString(), false);
+	}
+
+	int length = ref.length();
+	const char16_t *data = (const char16_t *)ref.data();
+
+	QString fixed;
+	fixed.reserve(length);
+
+	int passed = 0;
+	const char16_t *head = data;
+
+	for (int i = 0; i < length; ++i) {
+		char16_t c = data[i];
+		if (c < ' ' && c != '\n') {
+			continue;
+		}
+
+		bool plain = true;
+		switch (c) {
+		case '&':
+		{
+			int p = decodeHtmlEscape(data, length, i + 1, c);
+			plain = p == 0;
+			i += p;
+			break;
+		}
+		case '/':
+		case '\\':
+		{
+			int p = decodeCharEscape(data, length, i + 1, c);
+			plain = p == 0;
+			i += p;
+			break;
+		}
+		}
+		if (plain) {
+			++passed;
+		}
+		else {
+			if (passed > 0) {
+				fixed.append((QChar *)head, passed);
+				passed = 0;
+				head = data + i + 1;
+			}
+			fixed.append(QChar(c));
+		}
+	}
+	if (passed > 0) {
+		fixed.append((QChar *)head, passed);
 	}
 	return fixed;
 }

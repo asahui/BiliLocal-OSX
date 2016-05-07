@@ -37,8 +37,6 @@
 #include "../UI/Editor.h"
 #include <algorithm>
 
-#define qThreadPool QThreadPool::globalInstance()
-
 class DanmakuPrivate
 {
 public:
@@ -67,7 +65,6 @@ QAbstractItemModel(parent), d_ptr(new DanmakuPrivate)
 	setObjectName("Danmaku");
 	d->curr = d->time = 0;
 	d->dura = -1;
-	qThreadPool->setMaxThreadCount(Config::getValue("/Danmaku/Thread", QThread::idealThreadCount()));
 	connect(APlayer::instance(), &APlayer::jumped, this, &Danmaku::jumpToTime);
 	connect(APlayer::instance(), &APlayer::timeChanged, this, &Danmaku::setTime);
 	connect(this, SIGNAL(layoutChanged()), ARender::instance(), SLOT(draw()));
@@ -287,48 +284,52 @@ void Danmaku::appendToPool(const Record *record)
 {
 	Q_D(Danmaku);
 	Record *append = 0;
-	for (Record &r : d->pool){
-		if (r.source == record->source){
+	for (Record &r : d->pool) {
+		if (r.source == record->source) {
 			append = &r;
 			break;
 		}
 	}
-	if (!append){
+	if (append == nullptr) {
 		d->pool.append(*record);
 		QSet<CommentPointer> s;
 		auto &l = d->pool.last().danmaku;
-		for (auto i = l.begin(); i != l.end();){
-			auto c = s.size();
-			s.insert(&(*i));
-			if (c != s.size()){
-				++i;
-			}
-			else{
-				i = l.erase(i);
-			}
-		}
+		s.reserve(l.size());
+		auto e = std::remove_if(l.begin(), l.end(), [&s](const Comment &c) {
+			int n = s.size();
+			s.insert(&c);
+			return n == s.size();
+		});
+		l.erase(e, l.end());
 	}
-	else{
-		auto &l = append->danmaku;
+	else {
 		QSet<CommentPointer> s;
-		for (const Comment &c : l){
+		auto &l = append->danmaku;
+		int c = l.size() + record->danmaku.size();
+		s.reserve(c);
+		l.reserve(c);
+		for (const Comment &c : l) {
 			s.insert(&c);
 		}
-		for (Comment c : record->danmaku){
+		for (const Comment &i : record->danmaku) {
+			l.append(i);
+			Comment &c = l.last();
 			c.time += append->delay - record->delay;
-			if (!s.contains(&c)){
-				l.append(c);
-				s.insert(&l.last());
+			int n = s.size();
+			s.insert(&c);
+			if (n == s.size()) {
+				l.removeLast();
 			}
 		}
-		if (record->full){
+		if (record->full) {
 			append->full = true;
 		}
+		append->limit = record->limit == 0 ? 0 : qMax(append->limit, record->limit);
 	}
 	parse(0x1 | 0x2);
-	if (d->pool.size() >= 2 && !append){
-		QTimer::singleShot(0, [](){
-			if (!Load::instance()->getHead()){
+	if (d->pool.size() >= 2 && !append) {
+		QTimer::singleShot(0, []() {
+			if (!Load::instance()->getHead()) {
 				UI::Editor::exec(lApp->mainWidget());
 			}
 		});
@@ -337,20 +338,23 @@ void Danmaku::appendToPool(const Record *record)
 
 namespace
 {
-	class Compare
+	class CommentComparer
 	{
 	public:
+		inline bool operator ()(const Comment *f, const Comment *s)
+		{
+			return f->time < s->time;
+		}
+
+		//overloads for comparing with time
 		inline bool operator ()(const Comment *c, qint64 time)
 		{
 			return c->time < time;
 		}
+
 		inline bool operator ()(qint64 time, const Comment *c)
 		{
 			return time < c->time;
-		}
-		inline bool operator ()(const Comment *f, const Comment *s)
-		{
-			return f->time < s->time;
 		}
 	};
 }
@@ -372,9 +376,10 @@ void Danmaku::appendToPool(QString source, const Comment *comment)
 		append = &d->pool.last();
 	}
 	append->danmaku.append(*comment);
-	auto ptr = &append->danmaku.last();
-	ptr->time += append->delay;
-	d->danm.insert(std::upper_bound(d->danm.begin(), d->danm.end(), ptr, Compare()), ptr);
+	Comment *c = &append->danmaku.last();
+	c->time += append->delay;
+	d->danm.insert(std::upper_bound(d->danm.begin(), d->danm.end(), c, CommentComparer()), c);
+	append->limit = append->limit == 0 ? 0 : qMax(append->limit, c->date);
 	parse(0x2);
 }
 
@@ -425,74 +430,118 @@ void Danmaku::parse(int flag)
 		beginResetModel();
 		d->danm.clear();
 		for (Record &record : d->pool){
+			d->danm.reserve(d->danm.size() + record.danmaku.size());
 			for (Comment &comment : record.danmaku){
 				d->danm.append(&comment);
 			}
 		}
-		std::stable_sort(d->danm.begin(), d->danm.end(), Compare());
-		jumpToTime(d->time);
-		endResetModel();
-	}
-	if ((flag & 0x2) > 0){
-		for (Record &r : d->pool){
-			for (Comment &c : r.danmaku){
-				c.blocked = r.limit != 0 && c.date > r.limit;
-			}
-		}
-		QSet<QString> set;
-		int l = Config::getValue("/Shield/Limit/Count", 5);
-		int t = Config::getValue("/Shield/Limit/Range", 10000);
-		QVector<QString> clean;
-		clean.reserve(d->danm.size());
-		if (l != 0){
-			for (const Comment *c : d->danm){
-				QString r;
-				r.reserve(c->string.length());
-				for (const QChar &i : c->string){
-					if (i.isLetterOrNumber() || i.isMark() || i == '_'){
-						r.append(i);
-					}
-				}
-				clean.append(r);
-			}
-			QHash<QString, int> count;
-			int sta = 0, end = sta;
-			while (end != d->danm.size()){
-				while (d->danm[sta]->time + t < d->danm[end]->time){
-					if (--count[clean[sta]] == 0){
-						count.remove(clean[sta]);
-					}
-					++sta;
-				}
-				if (++count[clean[end]] > l&&d->danm[end]->mode <= 6){
-					set.insert(clean[end]);
-				}
-				++end;
-			}
-		}
+		std::stable_sort(d->danm.begin(), d->danm.end(), CommentComparer());
 		d->dura = -1;
-		for (Comment *c : d->danm){
-			if (c->time < 10000000 || c->time < d->dura * 2){
+		for (Comment *c : d->danm) {
+			if (c->time < 10000000 || c->time < d->dura * 2) {
 				d->dura = c->time;
 			}
-			else{
+			else {
 				break;
 			}
 		}
-		for (int i = 0; i < d->danm.size(); ++i){
-			Comment &c = *d->danm[i];
-			c.blocked = c.blocked || (l == 0 ? false : set.contains(clean[i])) || Shield::instance()->isBlocked(c);
+		jumpToTime(d->time);
+		endResetModel();
+	}
+	if ((flag & 0x2) > 0) {
+		//MUST BE SORTED
+		Q_ASSERT(std::is_sorted(d->danm.begin(), d->danm.end(), CommentComparer()));
+
+		// Date Limit
+		for (Record &r : d->pool) {
+			for (Comment &c : r.danmaku) {
+				c.blocked = r.limit != 0 && c.date > r.limit;
+			}
+		}
+		// Repeat Limit
+		int limit = Config::getValue("/Shield/Limit/Count", 5);
+		int range = Config::getValue("/Shield/Limit/Range", 10000);
+		if (limit != 0) {
+			QVector<QString> clean;
+			int size = d->danm.size();
+			clean.reserve(size);
+			for (const Comment *iter : d->danm) {
+				const auto &raw = iter->string;
+
+				int length = raw.length();
+				const QChar *data = raw.data();
+
+				QString clr;
+
+				int passed = 0;
+				const QChar *head = data;
+
+				for (int i = 0; i < length; ++i) {
+					const QChar &c = data[i];
+					if (c.isLetterOrNumber() || c.isMark() || c == '_') {
+						++passed;
+					}
+					else if (passed > 0) {
+						clr.reserve(length);
+						clr.append(head, passed);
+						passed = 0;
+						head = data + i + 1;
+					}
+				}
+				if (passed == length) {
+					clean.append(raw);
+				}
+				else {
+					if (passed > 0) {
+						clr.append(head, passed);
+					}
+					clean.append(clr);
+				}
+			}
+			QHash<QString, int> count;
+			int sta = 0, end = sta;
+			for (; end < size; ++end) {
+				Comment *e = d->danm[end];
+				while (d->danm[sta]->time + range < e->time) {
+					auto i = count.find(clean[sta]);
+					if (i.value() == 1) {
+						count.erase(i);
+					}
+					else if (i.value() > 1) {
+						--(i.value());
+					}
+					++sta;
+				}
+				int &num = count[clean[end]];
+				if (num >= 0 && ++num > limit && e->mode <= 6) {
+					num = -1;
+				}
+			}
+			for (; sta < size; ++sta) {
+				auto i = count.find(clean[sta]);
+				if (i.value() > 0) {
+					count.erase(i);
+				}
+			}
+			for (int i = 0; i < size; ++i) {
+				Comment *c = d->danm[i];
+				c->blocked = c->blocked || count.contains(clean[i]);
+			}
+		}
+		// Regex Limit
+		for (Comment *c : d->danm) {
+			c->blocked = c->blocked || Shield::instance()->isBlocked(*c);
 		}
 		qThreadPool->clear();
 		qThreadPool->waitForDone();
 		d->lock.lockForWrite();
-		for (auto iter = d->draw.begin(); iter != d->draw.end();){
+		for (auto iter = d->draw.begin(); iter != d->draw.end();) {
 			const Comment *cur = (*iter)->getSource();
-			if (cur&&cur->blocked){
+			if (cur&&cur->blocked) {
 				delete *iter;
 				iter = d->draw.erase(iter);
 			}
-			else{
+			else {
 				++iter;
 			}
 		}
@@ -517,14 +566,14 @@ namespace
 			danm->wait -= wait.size();
 		}
 
-		void run()
+		virtual void run() override
 		{
 			//跳过500毫秒以上未处理的弹幕
 			if (wait.isEmpty() || createTime < QDateTime::currentMSecsSinceEpoch() - 500){
 				return;
 			}
-			//子线程默认优先级和主线程相同，会导致卡顿
-			QThread::currentThread()->setPriority(QThread::NormalPriority);
+			//子线程优先级需要低于主线程
+			QThread::currentThread()->setPriority(QThread::LowPriority);
 			QList<Graphic *> ready;
 			for (const Comment *comment : wait){
 				Graphic *graphic = nullptr;
@@ -664,7 +713,7 @@ void Danmaku::jumpToTime(qint64 time)
 	Q_D(Danmaku);
 	clearCurrent(true);
 	d->time = time;
-	d->curr = std::lower_bound(d->danm.begin(), d->danm.end(), time, Compare()) - d->danm.begin();
+	d->curr = std::lower_bound(d->danm.begin(), d->danm.end(), time, CommentComparer()) - d->danm.begin();
 }
 
 void Danmaku::saveToFile(QString file) const

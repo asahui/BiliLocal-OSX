@@ -3,7 +3,8 @@ QT += \
     gui \
     network \
     widgets \
-    xml
+    xml \
+    concurrent
 
 TARGET = BiliLocal
 
@@ -14,6 +15,7 @@ CONFIG += c++11
 SOURCES += \
     src/Access/Load.cpp \
     src/Access/NetworkConfiguration.cpp \
+    src/Access/Parse.cpp \
     src/Access/Post.cpp \
     src/Access/Seek.cpp \
     src/Access/Sign.cpp \
@@ -47,6 +49,7 @@ HEADERS += \
     src/Access/AccessPrivate.h \
     src/Access/Load.h \
     src/Access/NetworkConfiguration.h \
+    src/Access/Parse.h \
     src/Access/Post.h \
     src/Access/Seek.h \
     src/Access/Sign.h \
@@ -94,11 +97,17 @@ TRANSLATIONS += \
 
 linux{
 DEFINES += \
-    BACKEND_VLC
+    BACKEND_VLC \
+    BACKEND_QMM \
+    BACKEND_NIL
 
 DEFINES += \
     RENDER_RASTER \
     RENDER_OPENGL
+
+LIBS += \
+    -lcrypto \
+    -lssl
 }
 
 win32{

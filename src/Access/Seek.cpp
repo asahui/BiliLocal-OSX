@@ -109,11 +109,6 @@ namespace
 			iter->setEditable(false);
 		}
 	}
-
-	QString toRichText(QString text)
-	{
-		return text.isEmpty() ? text : Qt::convertFromPlainText(text);
-	}
 }
 
 Seek::Seek(QObject *parent) : QObject(parent), d_ptr(new SeekPrivate(this))
@@ -125,12 +120,9 @@ Seek::Seek(QObject *parent) : QObject(parent), d_ptr(new SeekPrivate(this))
 	QList<const char *> biOrder;
 #define tr
 	biOrder <<
-		tr("default") <<
-		tr("pubdate") <<
-		tr("senddate") <<
-		tr("ranklevel") <<
+		tr("totalrank") <<
 		tr("click") <<
-		tr("scores") <<
+		tr("pubdate") <<
 		tr("dm") <<
 		tr("stow");
 #undef tr
@@ -157,13 +149,11 @@ Seek::Seek(QObject *parent) : QObject(parent), d_ptr(new SeekPrivate(this))
 				dequeue();
 				break;
 			}
-            QUrl url("http://search." + Utils::customUrl(Utils::Bilibili) + "/video");
+			QUrl url("http://search." + Utils::customUrl(Utils::Bilibili) + "/all");
 			QUrlQuery query;
 			query.addQueryItem("keyword", task.text);
-			query.addQueryItem("type", "comprehensive");
 			query.addQueryItem("page", QString::number(task.page.first));
-			query.addQueryItem("pagesize", "20");
-			query.addQueryItem("orderby", biOrder[task.sort]);
+			query.addQueryItem("order", biOrder[task.sort]);
 			url.setQuery(query);
 			task.request.setUrl(url);
 			task.state = List;
@@ -179,139 +169,117 @@ Seek::Seek(QObject *parent) : QObject(parent), d_ptr(new SeekPrivate(this))
 			task.model->horizontalHeaderItem(2)->setData(45, Qt::UserRole);
 			task.model->horizontalHeaderItem(4)->setData(75, Qt::UserRole);
 			task.model->horizontalHeaderItem(5)->setData(75, Qt::UserRole);
+
 			const QByteArray &data = reply->readAll();
 			auto page = QTextCodec::codecForHtml(data, QTextCodec::codecForName("UTF-8"))->toUnicode(data);
-            auto list = page.split(QRegularExpression("<li class=\"video\\W"), QString::SkipEmptyParts);
-			if (2 > list.size()) break;
-			QString &last = list.last();
-			last.truncate(last.indexOf("</li>") + 5);
-			list.removeFirst();
-			for (const QString &item : list){
+			QStringList list = page.split("<li class=\"video", QString::SkipEmptyParts);
+
+			if (list.isEmpty()) {
+				emit stateChanged(task.state = None);
+				dequeue();
+				break;
+			}
+
+			QRegularExpression r;
+			QRegularExpressionMatch m;
+			r.setPatternOptions(QRegularExpression::DotMatchesEverythingOption);
+
+			QStringList bang = list.takeFirst().split("<li class=\"synthetical");
+			if (bang.size() > 0) {
+				bang.removeFirst();
+			}
+			for (const QString &item : bang) {
 				QList<QStandardItem *> line;
-				for (int i = 0; i < 6; ++i){
-					line.append(new QStandardItem);
+				for (int i = 0; i < 6; ++i) {
+					line.append(new QStandardItem());
 				}
-				QRegularExpression r;
-				QRegularExpressionMatch m;
-				r.setPatternOptions(QRegularExpression::DotMatchesEverythingOption);
-				r.setPattern("av\\d+");
-				m = r.match(item);
-				bool isSeason = !m.hasMatch();
-				line[0]->setData(m.captured(), Qt::UserRole);
-				line[0]->setSizeHint(QSize(0, task.cover.height() + 3));
+
 				r.setPattern("(?<=src=\")[^\"']+");
-				m = r.match(item, isSeason ? 0 : m.capturedEnd());
+				m = r.match(item);
 				QNetworkRequest request(m.captured());
 				request.setAttribute(QNetworkRequest::User, (quintptr)line[0]);
-				images[&task].append(request);
-				if (isSeason){
-					r.setPattern("(?<=<div class=\"t\">).*?(?=</div>)");
-					m = r.match(item, m.capturedEnd());
-					line[3]->setText(Utils::decodeXml(m.captured()));
-				}
-				else{
-                    r.setPattern("class=\"type[^>]+>");
-                    m = r.match(item, m.capturedEnd());
-                    r.setPattern(".*?(?=</span>)");
-                    m = r.match(item, m.capturedEnd());
-                    line[4]->setText(m.captured().trimmed());
-                    r.setPattern("(?<=title=\")[^\"']+");
-                    //r.setPattern("(?=<a .*?class=\"title\"[^>]+).?*(?=</a>)");
-                    m = r.match(item, m.capturedEnd());
-                    line[3]->setText(Utils::decodeXml(m.captured().trimmed()));
+				d->remain += d->manager.get(request);
 
-                    r.setPattern("class=\"icon-playtime");
-                    m = r.match(item, m.capturedEnd());
-                    r.setPattern("(?<=</i>).*?(?=</span>)");
-                    m = r.match(item, m.capturedEnd());
-                    line[1]->setText(m.captured().trimmed());
+				r.setPattern("(?<=bangumi/i/)\\d+(?=/)");
+				m = r.match(item, m.capturedEnd());
+				line[0]->setData("bb" + m.captured(), Qt::UserRole);
+				line[0]->setSizeHint(QSize(0, task.cover.height() + 3));
 
-                    r.setPattern("class=\"icon-subtitle");
-                    m = r.match(item, m.capturedEnd());
-                    r.setPattern("(?<=</i>).*?(?=</span>)");
-                    m = r.match(item, m.capturedEnd());
-                    line[2]->setText(m.captured().trimmed());
+				r.setPattern("(?<=>).*?(?=</a>)");
+				m = r.match(item, m.capturedEnd());
+				line[3]->setText(Utils::decodeXml(m.captured().trimmed()));
 
-                    r.setPattern("class=\"icon-uper");
-                    m = r.match(item, m.capturedEnd());
-                    r.setPattern("(?<=</i>).*?(?=</span>)");
-                    m = r.match(item, m.capturedEnd());
-                    line[5]->setText(Utils::decodeXml(m.captured().trimmed()));
+				r.setPattern("(?<=>).*?(?=</div>)");
+				m = r.match(item, item.indexOf("class=\"des", m.capturedEnd()));
+				QString d = m.captured().trimmed();
+				d.replace("<em class=\"keyword\">", "<font color=red>").replace("</em>", "</font>");
+				d = "<p>" + d + "</p>";
+				line[3]->setToolTip(d);
 
-				}
-                r.setPattern("(?<=intro\">).*?(?=</div>)");
-                m = r.match(item);
-                line[3]->setToolTip(toRichText(Utils::decodeXml(m.captured())));
-                // Bangumi html has changed
-                /*if (isBangumi) {
-                    r.setPattern("(?<=createSeasonList\\().*?(?=\\);)");
-                    m = r.match(item, m.capturedEnd());
-                    QStringList args = m.captured().split(',');
-                    if (args.size() == 3){
-                        for (QString &iter : args){
-                            iter = iter.trimmed();
-                        }
-                        QString url("http://app." + Utils::customUrl(Utils::Bilibili) + "/bangumi/seasoninfo/");
-                        url += args[1] + ".ver";
-                        QNetworkRequest request(url);
-                        request.setAttribute(QNetworkRequest::User, (quintptr)line[0]);
-                        d->remain += d->manager.get(request);
-                    }
-                }*/
 				disableEditing(line);
 				task.model->appendRow(line);
 			}
-            auto m = QRegularExpression("\\d+").match(page, page.indexOf("data-num_pages"));
-			task.page.second = qMax(list.isEmpty() ? 0 : task.page.first, m.captured().toInt());
+
+			if (list.size() > 0) {
+				QString &last = list.last();
+				last.truncate(last.indexOf("</li>") + 5);
+			}
+			for (const QString &item : list) {
+				QList<QStandardItem *> line;
+				for (int i = 0; i < 6; ++i) {
+					line.append(new QStandardItem());
+				}
+
+				r.setPattern("av\\d+");
+				m = r.match(item);
+				line[0]->setData(m.captured(), Qt::UserRole);
+				line[0]->setSizeHint(QSize(0, task.cover.height() + 3));
+
+				r.setPattern("(?<=src=\")[^\"']+");
+				m = r.match(item, m.capturedEnd());
+				QNetworkRequest request(m.captured());
+				request.setAttribute(QNetworkRequest::User, (quintptr)line[0]);
+				d->remain += d->manager.get(request);
+
+				r.setPattern("(?<=>).*?(?=</span>)");
+				m = r.match(item, item.indexOf("class=\"type", m.capturedEnd()));
+				line[4]->setText(Utils::decodeXml(m.captured()));
+
+				r.setPattern("(?<=>).*?(?=</a>)");
+				m = r.match(item, item.indexOf("class=\"title", m.capturedEnd()));
+				line[3]->setText(Utils::decodeXml(m.captured().trimmed()));
+
+				r.setPattern("(?<=>).*?(?=</div>)");
+				m = r.match(item, item.indexOf("class=\"des", m.capturedEnd()));
+				QString d = m.captured().trimmed();
+				d.replace("<em class=\"keyword\">", "<font color=red>").replace("</em>", "</font>");
+				d = "<p>" + d + "</p>";
+				line[3]->setToolTip(d);
+
+				r.setPattern("(?<=i>).*?(?=</span>)");
+				m = r.match(item, item.indexOf("playtime", m.capturedEnd()));
+				line[1]->setText(m.captured().simplified());
+
+				m = r.match(item, item.indexOf("subtitle", m.capturedEnd()));
+				line[2]->setText(m.captured().simplified());
+
+				r.setPattern("(?<=>).*?(?=</a>)");
+				m = r.match(item, item.indexOf("uper", m.capturedEnd()));
+				line[5]->setText(Utils::decodeXml(m.captured()));
+
+				disableEditing(line);
+				task.model->appendRow(line);
+			}
+
+			auto num = QRegularExpression("(?<=\")\\d+").match(page, page.indexOf("data-num_pages"));
+			task.page.second = num.captured().toInt();
+
 			if (d->remain.isEmpty()){
-				emit stateChanged(task.state = Data);
+				emit stateChanged(task.state = None);
+				dequeue();
 			}
 			else{
-				emit stateChanged(task.state = More);
-				break;
-			}
-		}
-		case More:
-		{
-			auto cell = praseItem(reply->request());
-            QByteArray r = reply->readAll();
-            if (r.startsWith("episodeJsonCallback")) {
-                r = r.mid(r.indexOf("code") - 2,  r.length() - r.indexOf("code") + 1);
-            }
-            QJsonObject seasonlist = QJsonDocument::fromJson(r).object();
-            QJsonArray list = seasonlist["result"].toObject()["episodes"].toArray();
-			for (const QJsonValue &iter : list){
-				QJsonObject item = iter.toObject();
-				QList<QStandardItem *> line;
-				for (int i = 0; i < 6; ++i){
-					line.append(new QStandardItem);
-				}
-                line[0]->setData(QString("av%1").arg(item["av_id"].toString()), Qt::UserRole);
-				line[0]->setSizeHint(QSize(0, task.cover.height() + 3));
-				QNetworkRequest request(item["cover"].toString());
-				request.setAttribute(QNetworkRequest::User, (quintptr)line[0]);
-				images[&task].append(request);
-                //line[1]->setText(QString::number(item["click"].toInt()));
-                line[3]->setText(Utils::decodeXml(item["index_title"].toString()));
-				disableEditing(line);
-				cell->insertRow(0, line);
-			}
-			if (d->remain.isEmpty()){
-				if (reply->error() != QNetworkReply::OperationCanceledError){
-					for (auto r : images.take(&task)){
-						d->remain += d->manager.get(r);
-					}
-					if (d->remain.isEmpty()){
-						emit stateChanged(task.state = None);
-						dequeue();
-					}
-					else{
-						emit stateChanged(task.state = Data);
-					}
-				}
-				else{
-					images.remove(&task);
-				}
+				emit stateChanged(task.state = Data);
 			}
 			break;
 		}
@@ -374,14 +342,16 @@ Seek::Seek(QObject *parent) : QObject(parent), d_ptr(new SeekPrivate(this))
 			task.model->horizontalHeaderItem(2)->setData(45, Qt::UserRole);
 			task.model->horizontalHeaderItem(4)->setData(75, Qt::UserRole);
 			task.model->horizontalHeaderItem(5)->setData(75, Qt::UserRole);
+
 			QJsonObject page = QJsonDocument::fromJson(reply->readAll()).object()["data"].toObject()["page"].toObject();
-			QJsonArray list = page["list"].toArray();
-			for (int i = 0; i < list.count(); ++i){
-				QJsonObject item = list[i].toObject();
+			for (const QJsonValue &iter : page["list"].toArray()){
+				QJsonObject item = iter.toObject();
+
 				int channelId = item["channelId"].toDouble();
 				if (channelId == 110 || channelId == 63 || (channelId > 72 && channelId < 77)) {
 					continue;
 				}
+
 				QList<QStandardItem *> line;
 				line << new QStandardItem();
 				line << new QStandardItem(QString::number((int)item["views"].toDouble()));
@@ -391,14 +361,18 @@ Seek::Seek(QObject *parent) : QObject(parent), d_ptr(new SeekPrivate(this))
 				line << new QStandardItem(Utils::decodeXml(item["username"].toString()));
 				line[0]->setData(item["contentId"].toString(), Qt::UserRole);
 				line[0]->setSizeHint(QSize(0, task.cover.height() + 3));
-				line[3]->setToolTip(toRichText(item["description"].toString()));
+				line[3]->setToolTip("<p>" + item["description"].toString() + "</p>");
+
 				QNetworkRequest request(QUrl(item["titleImg"].toString()));
 				request.setAttribute(QNetworkRequest::User, (quintptr)line[0]);
 				d->remain += d->manager.get(request);
+
 				disableEditing(line);
 				task.model->appendRow(line);
 			}
+
 			task.page.second = qCeil(page["totalCount"].toDouble() / page["pageSize"].toDouble());
+
 			if (d->remain.isEmpty()){
 				emit stateChanged(task.state = None);
 				dequeue();
