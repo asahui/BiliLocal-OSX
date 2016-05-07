@@ -37,11 +37,11 @@ namespace UI
 		Q_OBJECT
 	public:
         static Search* instance();
+        explicit Search(QWidget *parent = 0);
         ~Search();
 
 	private:
         static Search* ins;
-        explicit Search(QWidget *parent = 0);
 		QLabel *statusL;
 		QLabel *pageT;
 		QLabel *pageL;

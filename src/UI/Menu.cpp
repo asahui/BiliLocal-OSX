@@ -457,16 +457,17 @@ QWidget(parent)
         }
 	});
 	connect(sechA, &QAction::triggered, [this](){
-            Search *  searchBox = Search::instance();
+            //Search *  searchBox = Search::instance();
+            Search searchBox(lApp->mainWidget());
             sechL->setText(sechL->text().simplified());
             if (!sechL->text().isEmpty()){
-                searchBox->setKey(sechL->text());
+                searchBox.setKey(sechL->text());
             }
-            Utils::setCenter(searchBox);
-            if (searchBox->exec()) {
-                Load::instance()->loadDanmaku(searchBox->getAid());
+            //Utils::setCenter(searchBox);
+            if (searchBox.exec()) {
+                Load::instance()->loadDanmaku(searchBox.getAid());
             }
-            sechL->setText(searchBox->getKey());
+            sechL->setText(searchBox.getKey());
             sechL->setFocus();
 
 
